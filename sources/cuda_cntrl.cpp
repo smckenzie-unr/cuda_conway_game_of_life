@@ -4,7 +4,7 @@ namespace application{
 cuda_cntrl::cuda_cntrl(        
     uint64_t height,
     uint64_t width
-) noexcept
+)
 : m_cell_count(width * height)
 , m_width(width)
 , m_height(height)
@@ -16,25 +16,55 @@ cuda_cntrl::cuda_cntrl(
 , m_pcurrent(nullptr)
 , m_pnext(nullptr)
 {
-    cudaMalloc(&m_pcurrent, m_cell_count);
-    cudaMalloc(&m_pnext, m_cell_count);
+    if (cudaMalloc(&m_pcurrent, m_cell_count) != cudaSuccess) {
+        throw cuda_error_codes::cuda_malloc_error;
+    }
+
+    if (cudaMalloc(&m_pnext, m_cell_count) != cudaSuccess) {
+        throw cuda_error_codes::cuda_malloc_error;
+    }
+
+    std::vector<uint8_t> temp(m_cell_count, 0);
+
+    if (cudaMemcpy(
+            m_pcurrent,
+            temp.data(),
+            m_cell_count,
+            cudaMemcpyHostToDevice
+        ) != cudaSuccess
+    )
+    {
+        throw cuda_error_codes::cuda_memcpy_error;
+    }
 }
 cuda_cntrl::~cuda_cntrl() noexcept
 {
-    cudaFree(m_pcurrent);
-    cudaFree(m_pnext);
+    if (m_pcurrent) {
+        cudaFree(m_pcurrent);
+        m_pcurrent = nullptr;
+    }
+
+    if (m_pnext) {
+        cudaFree(m_pnext);
+        m_pnext = nullptr;
+    }
 }
 
-void cuda_cntrl::run_kernel(uint8_t* host_grid, bool edited, bool paused) noexcept
+void cuda_cntrl::run_kernel(uint8_t* host_grid, bool edited, bool paused)
 {
+    cudaError_t err;
+
     // If the user edited the board, copy the latest host data to the GPU.
     if(edited) {
-        cudaMemcpy(
-            m_pcurrent,
-            host_grid,
-            m_cell_count,
-            cudaMemcpyHostToDevice
-        );
+        err = cudaMemcpy(
+                m_pcurrent,
+                host_grid,
+                m_cell_count,
+                cudaMemcpyHostToDevice
+            );
+        if (err) {
+            throw cuda_error_codes::cuda_memcpy_error;
+        }
     }
 
     if (!paused) {
@@ -46,22 +76,32 @@ void cuda_cntrl::run_kernel(uint8_t* host_grid, bool edited, bool paused) noexce
         );
 
         // Check that the kernel launched without errors.
-        cudaGetLastError();
+        err = cudaGetLastError();
+        if (err) {
+            std::cerr << "Internal cuda error. Error code: " << err << std::endl;
+            throw cuda_error_codes::cuda_internal_error;
+        }
 
         // Wait until the GPU finishes the kernel before reading results.
-        cudaDeviceSynchronize();
+        err = cudaDeviceSynchronize();
+        if (err) {
+            std::cerr << "Device synchronize error: " << err << std::endl;
+            throw cuda_error_codes::cuda_device_sync_error;
+        }
 
         // Swap the buffers so m_pcurrent points to the freshly computed data.
         std::swap(m_pcurrent, m_pnext);
 
         // Copy the newly computed generation back to the host so we can draw it.
-        cudaMemcpy(
-            host_grid,
-            m_pcurrent,
-            m_cell_count,
-            cudaMemcpyDeviceToHost
-        );
+        err = cudaMemcpy(
+                host_grid,
+                m_pcurrent,
+                m_cell_count,
+                cudaMemcpyDeviceToHost
+            );
+        if (err) {
+            throw cuda_error_codes::cuda_memcpy_error;
+        }
     }
-    
 }
 }//application

@@ -3,10 +3,19 @@
 #include <cstdlib>
 #include <cstdint>
 #include <vector>
+#include <iostream>
 
 #include "conway_gol_kernel.cuh"
 
 namespace application {
+enum class cuda_error_codes : int64_t {
+    no_error = 0,
+    cuda_malloc_error = -1,
+    cuda_memcpy_error = -2,
+    cuda_internal_error = -3,
+    cuda_device_sync_error = -4
+};
+
 class cuda_cntrl final {
 public:
     cuda_cntrl(const cuda_cntrl &) = delete;
@@ -14,10 +23,10 @@ public:
     explicit cuda_cntrl(        
         uint64_t height,
         uint64_t width
-    ) noexcept;
+    );
     ~cuda_cntrl() noexcept;
 
-    void run_kernel(uint8_t* host_grid, bool edited, bool paused) noexcept;
+    void run_kernel(uint8_t* host_grid, bool edited, bool paused);
 
 private:
     const size_t m_cell_count;
