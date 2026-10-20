@@ -12,6 +12,7 @@ set(CMAKE_CUDA_ARCHITECTURES 86)
 
 find_package(CUDAToolkit REQUIRED)
 find_package(SDL2 REQUIRED)
+include(CTest)
 
 add_executable(
     nvidia_conways_gol
@@ -54,3 +55,58 @@ target_compile_definitions(
         BLOCK_WIDTH_DIMENSION=16
         BLOCK_HEIGHT_DIMENSION=16
 )
+
+if(BUILD_TESTING)
+    add_executable(
+        conway_gol_kernel_test
+        tests/conway_gol_kernel_test.cu
+        sources/conway_gol_kernel.cu
+    )
+
+    set_target_properties(
+        conway_gol_kernel_test
+        PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+    )
+
+    target_include_directories(
+        conway_gol_kernel_test
+        PRIVATE
+            includes
+    )
+
+    target_link_libraries(
+        conway_gol_kernel_test
+        PRIVATE
+            CUDA::cudart
+    )
+
+    add_test(
+        NAME conway_gol_kernel_test
+        COMMAND conway_gol_kernel_test
+    )
+    set_tests_properties(
+        conway_gol_kernel_test
+        PROPERTIES
+            SKIP_RETURN_CODE 77
+    )
+
+    add_custom_target(
+        run_conway_gol_kernel_test
+        COMMAND
+            ${CMAKE_CTEST_COMMAND}
+            --verbose
+            --output-on-failure
+            --test-dir "${CMAKE_BINARY_DIR}"
+            -R "^conway_gol_kernel_test$"
+        DEPENDS
+            conway_gol_kernel_test
+        USES_TERMINAL
+        VERBATIM
+    )
+
+    add_dependencies(
+        nvidia_conways_gol
+        run_conway_gol_kernel_test
+    )
+endif()
