@@ -6,6 +6,9 @@
 #include "mainwindow.h"
 #include "cuda_cntrl.h"
 
+constexpr int C_MAINWINDOW_ERROR_CODES(-10);
+constexpr int C_CUDACNTRL_ERROR_CODES(-20);
+
 int main(int argc, char* argv[]) {
     int return_val(0);
 
@@ -34,15 +37,24 @@ int main(int argc, char* argv[]) {
         }
     }
     catch (const application::error_codes &code) {
-            return_val = static_cast<int>(code);
+        return_val = static_cast<int>(code) - C_MAINWINDOW_ERROR_CODES;
+    }
+    catch (const application::cuda_error_codes &code) {
+        return_val = static_cast<int>(code) - C_CUDACNTRL_ERROR_CODES;
     }
     
-    while(window->is_running()) {
-        cuda->run_kernel(
-            window->get_grid_data(),
-            window->event_polling(),
-            window->is_paused()
-        );
+    while(!return_val && window->is_running()) {
+        try {
+            cuda->run_kernel(
+                window->get_grid_data(),
+                window->event_polling(),
+                window->is_paused()
+            );
+        }
+        catch (const application::cuda_error_codes& code) {
+            return_val = static_cast<int>(code) - C_CUDACNTRL_ERROR_CODES;
+            break;
+        }
         window->incr_generation();
         window->render_board();
     }
